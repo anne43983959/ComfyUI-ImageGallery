@@ -4,8 +4,8 @@ import { app } from "../../scripts/app.js";
 const PAGE_PATH = "/gallery";
 const TOOLTIP = "打开图片画廊（Shift+点击弹出独立窗口）";
 const NEW_WINDOW_FEATURES = "width=1400,height=900,resizable=yes,scrollbars=yes,status=yes";
-const MIN_VERSION_FOR_ACTION_BAR = [1, 33, 9];
 const MAX_ATTACH_ATTEMPTS = 120;
+const ACTION_BAR_SELECTORS = "[data-testid='action-bar-buttons'], .actionbar-container";
 const CHANNEL_NAME = "comfyui-gallery";
 const PENDING_KEY = "ig.pendingWorkflow";
 const PENDING_MAX_AGE = 120000;
@@ -33,35 +33,20 @@ function openGallery(event) {
   window.open(url, "_blank");
 }
 
-function parseVersion(value) {
-  const parts = String(value || "0.0.0").replace(/^v/i, "").split("-")[0].split(".").map(function (n) {
-    return parseInt(n, 10) || 0;
-  });
-  while (parts.length < 3) parts.push(0);
-  return parts;
+function actionBarHost() {
+  return document.querySelector(ACTION_BAR_SELECTORS);
 }
 
-function compareVersions(a, b) {
-  const va = parseVersion(a), vb = parseVersion(b);
-  for (let i = 0; i < 3; i++) {
-    if (va[i] > vb[i]) return 1;
-    if (va[i] < vb[i]) return -1;
-  }
-  return 0;
-}
-
-async function frontendVersion() {
-  try {
-    if (window.__COMFYUI_FRONTEND_VERSION__) return window.__COMFYUI_FRONTEND_VERSION__;
-  } catch (error) { /* ignore */ }
-  try {
-    const res = await fetch("/system_stats");
-    const data = await res.json();
-    const sys = (data && data.system) || {};
-    return sys.comfyui_frontend_version || sys.required_frontend_version || "0.0.0";
-  } catch (error) {
-    return "0.0.0";
-  }
+/* 前端不暴露版本号（/system_stats 与 index.html 都没有），所以按 DOM 判断：
+   有 action bar 就用声明式按钮，若干帧后仍没有才回退老按钮。 */
+function scheduleLegacyFallback() {
+  let attempts = 0;
+  const probe = function () {
+    if (actionBarHost()) return;
+    if (attempts++ < MAX_ATTACH_ATTEMPTS) { requestAnimationFrame(probe); return; }
+    attachLegacyButton();
+  };
+  requestAnimationFrame(probe);
 }
 
 function isGalleryButton(element) {
@@ -85,10 +70,11 @@ function paintIcon(button) {
 function keepLogoInActionBar() {
   let attempts = 0;
   const scan = function () {
-    const bar = document.querySelector("[data-testid='action-bar-buttons']")
-      || document.querySelector(".actionbar-container")
-      || document.querySelector(".comfyui-menu")
-      || document.body;
+    const bar = actionBarHost();
+    if (!bar) {
+      if (attempts++ < MAX_ATTACH_ATTEMPTS) requestAnimationFrame(scan);
+      return;
+    }
     const buttons = Array.prototype.slice.call(bar.querySelectorAll("button")).filter(isGalleryButton);
     if (buttons.length) {
       buttons.forEach(paintIcon);
@@ -199,12 +185,10 @@ function attachLegacyButton() {
 
     let attempts = 0;
     const attach = function () {
-      const host = document.querySelector(".comfyui-menu")
-        || document.querySelector("[data-testid='action-bar-buttons']")
-        || document.querySelector(".actionbar-container");
+      const host = document.querySelector(".comfyui-menu");
       if (host) {
         host.appendChild(button.element);
-        keepLogoInActionBar();
+        paintIcon(button.element);
         return;
       }
       if (attempts++ < MAX_ATTACH_ATTEMPTS) requestAnimationFrame(attach);
@@ -215,23 +199,15 @@ function attachLegacyButton() {
   });
 }
 
-(async function () {
-  const version = await frontendVersion();
-  const useActionBar = compareVersions(version, MIN_VERSION_FOR_ACTION_BAR) >= 0;
-  const extension = {
-    name: "ImageGallery.TopMenu",
-    async setup() {
-      listenChannel();
-      consumePending();
-      if (!useActionBar) attachLegacyButton();
-      keepLogoInActionBar();
-    },
-  };
-  if (useActionBar) {
-    extension.actionBarButtons = [
-      { icon: "icon-[lucide--images] size-4", tooltip: TOOLTIP, onClick: openGallery },
-    ];
-  }
-  app.registerExtension(extension);
-  console.info("[ImageGallery] ready (actionBar=" + useActionBar + ", frontend=" + version + ", icon=" + ICON_PATH + ")");
-})();
+app.registerExtension({
+  name: "ImageGallery.TopMenu",
+  actionBarButtons: [
+    { icon: "icon-[lucide--images] size-4", tooltip: TOOLTIP, onClick: openGallery },
+  ],
+  async setup() {
+    listenChannel();
+    consumePending();
+    keepLogoInActionBar();
+    scheduleLegacyFallback();
+  },
+});

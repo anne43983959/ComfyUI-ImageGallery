@@ -2,6 +2,12 @@
 
 All notable changes to this plugin, in build order.
 
+## Unreleased
+
+- Top-bar button: register through the declarative action bar and fall back to the legacy button only
+  when no action bar container shows up, instead of sniffing a frontend version the frontend never
+  exposes. Current frontends no longer import the deprecated `/scripts/ui/components/button.js`.
+
 ## 0.5.0 — stage 5 (acceptance and polish)
 
 - Bilingual diff summaries: `summarize(..., lang="en")` plus `lang` on the detail and
