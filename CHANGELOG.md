@@ -2,8 +2,21 @@
 
 All notable changes to this plugin, in build order.
 
-## Unreleased
+## 0.6.0 — event-driven refresh and a zoomable viewer
 
+- The index refresh is no longer a flat ten-minute timer. The worker samples the prompt queue it
+  already watches and treats the busy-to-idle edge as "a generation just finished", scanning on the
+  next tick; a five-second signature probe (root mtime + the newest four subdirectory mtimes) covers
+  files that appear without a queue event, with a twenty-second cool-down so a long batch cannot cause
+  back-to-back full walks. The ten-minute timer stays as a backstop.
+- The gallery page piggybacks on its existing three-second status poll: when the index grows and the
+  user is looking at the newest rows, the grid reloads silently and keeps its scroll position. It stays
+  out of the way while a selection exists, the detail drawer or lightbox is open, or the grid is
+  scrolled further down.
+- The lightbox image can be zoomed with the wheel (1x-8x, anchored at the pointer) and panned by
+  dragging; the current zoom is shown in the bottom bar. Paging is disabled while zoomed so it cannot
+  fight a drag, and the zoom resets when moving to the next image.
+- The status badge now reports the real milestone instead of a hardcoded one.
 - Top-bar button: register through the declarative action bar and fall back to the legacy button only
   when no action bar container shows up, instead of sniffing a frontend version the frontend never
   exposes. Current frontends no longer import the deprecated `/scripts/ui/components/button.js`.
