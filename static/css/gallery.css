@@ -103,7 +103,13 @@ button { font: inherit; }
   background: rgba(8, 10, 14, .93);
   display: flex; align-items: center; justify-content: center;
 }
-.ig-lightbox-img { max-width: 100vw; max-height: 100vh; object-fit: contain; user-select: none; }
+.ig-lightbox-img {
+  max-width: 100vw; max-height: 100vh; object-fit: contain; user-select: none;
+  transform-origin: center center; will-change: transform; cursor: zoom-in;
+  -webkit-user-drag: none;
+}
+.ig-lightbox-img.is-zoomed { cursor: grab; }
+.ig-lightbox-img.is-panning { cursor: grabbing; }
 .ig-lightbox-nav {
   position: absolute; top: 50%; transform: translateY(-50%);
   width: 48px; height: 96px; border: 0; cursor: pointer;

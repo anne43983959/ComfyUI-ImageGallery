@@ -52,7 +52,7 @@ const el = {};
  'ig-drawer', 'ig-drawer-title', 'ig-drawer-body', 'ig-drawer-close', 'ig-prev', 'ig-next',
  'ig-menu', 'ig-overlay', 'ig-modal-title', 'ig-modal-body', 'ig-modal-foot', 'ig-modal-close',
  'ig-toasts', 'ig-scan', 'ig-trash', 'ig-settings', 'ig-drafts', 'ig-fav', 'ig-tag-btn',
- 'ig-lightbox', 'ig-lightbox-img', 'ig-lightbox-name', 'ig-lb-prev', 'ig-lb-next', 'ig-lb-close', 'ig-lb-detail',
+ 'ig-lightbox', 'ig-lightbox-img', 'ig-lightbox-name', 'ig-lightbox-zoom', 'ig-lb-prev', 'ig-lb-next', 'ig-lb-close', 'ig-lb-detail',
  'ig-sidebar', 'ig-sidebar-resize', 'ig-sidebar-toggle', 'ig-thumb-size',
  'ig-lang', 'ig-regex', 'ig-bulk-compare', 'ig-bulk-rename', 'ig-bulk-move', 'ig-search-history',
  'ig-sidebar-toggle-top', 'ig-update', 'ig-update-reload'].forEach(function (id) {
@@ -1038,13 +1038,15 @@ function toggleRegex() {
 
 /* ---------------- 灯箱：页面内最大化（不是浏览器全屏） ---------------- */
 
-const lightbox = { id: 0, newer: null, older: null };
+const ZOOM_MAX = 8;
+const lightbox = { id: 0, newer: null, older: null, zoom: 1, panX: 0, panY: 0, dragged: false };
 
 async function openLightbox(fileId) {
   if (!fileId) return;
   lightbox.id = fileId;
   lightbox.newer = null;
   lightbox.older = null;
+  resetLightboxZoom();
   el['ig-lightbox-img'].src = API + '/raw?id=' + fileId;
   el['ig-lightbox-name'].textContent = '#' + fileId;
   el['ig-lightbox'].hidden = false;
@@ -1069,6 +1071,24 @@ async function openLightbox(fileId) {
 function closeLightbox() {
   el['ig-lightbox'].hidden = true;
   el['ig-lightbox-img'].src = '';
+  resetLightboxZoom();
+}
+
+function applyLightboxZoom() {
+  const image = el['ig-lightbox-img'];
+  const fit = lightbox.zoom <= 1.001;  // 浮点乘法会留下 1.0000000000000004 这类残差
+  image.style.transform = fit ? '' : 'translate(' + lightbox.panX.toFixed(1) + 'px,' +
+    lightbox.panY.toFixed(1) + 'px) scale(' + lightbox.zoom.toFixed(3) + ')';
+  image.classList.toggle('is-zoomed', !fit);
+  if (el['ig-lightbox-zoom']) el['ig-lightbox-zoom'].textContent = Math.round((fit ? 1 : lightbox.zoom) * 100) + '%';
+}
+
+function resetLightboxZoom() {
+  lightbox.zoom = 1;
+  lightbox.panX = 0;
+  lightbox.panY = 0;
+  lightbox.dragged = false;
+  applyLightboxZoom();
 }
 
 function lightboxStep(direction) {
@@ -1094,6 +1114,9 @@ function bindLightbox() {
   let clickTimer = 0;
   image.addEventListener('click', function (event) {
     clearTimeout(clickTimer);
+    const dragged = lightbox.dragged;
+    lightbox.dragged = false;
+    if (lightbox.zoom > 1 || dragged) return;  // 放大状态只做平移，翻页交给左右箭头
     const rect = image.getBoundingClientRect();
     const goNewer = (event.clientX - rect.left) < rect.width / 2;
     clickTimer = setTimeout(function () {
@@ -1104,6 +1127,54 @@ function bindLightbox() {
     clearTimeout(clickTimer);
     closeLightbox();
   });
+
+  // 滚轮缩放：以光标为锚点，1x 表示适配窗口，最大 8x
+  image.addEventListener('wheel', function (event) {
+    event.preventDefault();
+    const step = lightbox.zoom * (event.deltaY < 0 ? 1.15 : 1 / 1.15);
+    const next = Math.min(ZOOM_MAX, step <= 1.001 ? 1 : step);
+    if (Math.abs(next - lightbox.zoom) < 1e-4) return;
+    const rect = image.getBoundingClientRect();
+    const cx = event.clientX - (rect.left + rect.width / 2);
+    const cy = event.clientY - (rect.top + rect.height / 2);
+    const ratio = next / lightbox.zoom;
+    lightbox.panX -= cx * (ratio - 1);
+    lightbox.panY -= cy * (ratio - 1);
+    lightbox.zoom = next;
+    if (next === 1) { lightbox.panX = 0; lightbox.panY = 0; }
+    applyLightboxZoom();
+  }, { passive: false });
+
+  // 放大后按住拖动平移
+  let panning = false, panStartX = 0, panStartY = 0, panBaseX = 0, panBaseY = 0;
+  image.addEventListener('pointerdown', function (event) {
+    lightbox.dragged = false;
+    if (lightbox.zoom <= 1) return;
+    panning = true;
+    panStartX = event.clientX;
+    panStartY = event.clientY;
+    panBaseX = lightbox.panX;
+    panBaseY = lightbox.panY;
+    image.classList.add('is-panning');
+    try { image.setPointerCapture(event.pointerId); } catch (error) { /* ignore */ }
+  });
+  image.addEventListener('pointermove', function (event) {
+    if (!panning) return;
+    const dx = event.clientX - panStartX;
+    const dy = event.clientY - panStartY;
+    if (Math.abs(dx) + Math.abs(dy) > 6) lightbox.dragged = true;
+    lightbox.panX = panBaseX + dx;
+    lightbox.panY = panBaseY + dy;
+    applyLightboxZoom();
+  });
+  const endPan = function (event) {
+    if (!panning) return;
+    panning = false;
+    image.classList.remove('is-panning');
+    try { image.releasePointerCapture(event.pointerId); } catch (error) { /* ignore */ }
+  };
+  image.addEventListener('pointerup', endPan);
+  image.addEventListener('pointercancel', endPan);
 }
 
 /* ---------------- 侧栏：可调宽度 + 可折叠 ---------------- */
@@ -1346,7 +1417,7 @@ async function pollStatus() {
   try {
     const stats = await api('/stats');
     state.stats = stats;
-    el['ig-badge'].textContent = 'M4';
+    el['ig-badge'].textContent = state.milestone || '';
     const worker = stats.worker || {};
     const parts = [];
     if (worker.phase === 'index') parts.push('索引中 ' + (worker.dir || '').split('\\').pop());
@@ -1356,9 +1427,25 @@ async function pollStatus() {
     parts.push('在线 ' + stats.viewers);
     if (stats.jobs && stats.jobs[0] && stats.jobs[0].message) parts.push(stats.jobs[0].message);
     el['ig-status'].textContent = parts.join(' · ');
+    maybeAutoRefresh(stats);
   } catch (error) {
     el['ig-status'].textContent = '后端未就绪：' + error.message;
   }
+}
+
+/* 索引一变多就自己刷新：数据来自既有的 3 秒状态轮询，不额外发请求。
+   只在"用户正看着最新一批"时静默重载；已选中、开着详情或灯箱、已经翻到下面时都不打断。 */
+function maybeAutoRefresh(stats) {
+  const seen = state.indexSeen;
+  state.indexSeen = stats.files;
+  if (seen === null || seen === undefined || stats.files <= seen) return;
+  if (state.selected.size || !el['ig-drawer'].hidden || !el['ig-lightbox'].hidden) return;
+  const wrap = el['ig-grid-wrap'];
+  if (wrap.scrollTop > 400) return;
+  const scrollTop = wrap.scrollTop;
+  reload().then(function () {
+    requestAnimationFrame(function () { wrap.scrollTop = scrollTop; });
+  }).catch(function () { /* 下一轮轮询再试 */ });
 }
 
 /* ---------------- 事件绑定 ---------------- */
@@ -1506,7 +1593,8 @@ async function boot() {
   watchVersion();
   try {
     const hello = await api('/hello');
-    el['ig-badge'].textContent = hello.milestone || 'M4';
+    state.milestone = hello.milestone || '';
+    el['ig-badge'].textContent = state.milestone;
     el['ig-status'].textContent = hello.plugin + ' v' + hello.version;
   } catch (error) {
     el['ig-status'].textContent = '后端未就绪：' + error.message;
