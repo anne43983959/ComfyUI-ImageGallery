@@ -296,6 +296,43 @@ def main():
     status, purged = call("/api/gallery/trash/purge", "POST", {"batch": "no-such-batch"})
     check("清空批次接口可用", status == 200 and purged.get("removed") == 0, purged)
 
+    # ---------- 目录变化探测：新图落地后不必等 10 分钟 ----------
+    import py.jobs as jobs_mod
+    probe_interval, hot_interval = jobs_mod.SCAN_PROBE_INTERVAL, jobs_mod.SCAN_HOT_INTERVAL
+    jobs_mod.SCAN_PROBE_INTERVAL = 0.0
+    jobs_mod.SCAN_HOT_INTERVAL = 0.0
+    runner = rt.runner
+    runner._last_probe = 0.0
+    rt.store.set_setting("last_scan_at", str(time.time()))
+    rt.store.set_setting("roots_signature", runner._roots_signature())
+    idle_again = runner._needs_scan()
+    probe_dir = os.path.join(WORK, "2026-03-03")
+    os.makedirs(probe_dir, exist_ok=True)
+    with open(os.path.join(probe_dir, "probe_00001_.png"), "wb") as handle:
+        handle.write(b"\x89PNG\r\n\x1a\n" + b"\x00" * 128)
+    runner._last_probe = 0.0
+    detected = runner._needs_scan()
+    jobs_mod.SCAN_PROBE_INTERVAL = probe_interval
+    jobs_mod.SCAN_HOT_INTERVAL = hot_interval
+    check("无变化时不重复扫描", idle_again is False, idle_again)
+    check("新图落地后立刻触发扫描", detected is True, detected)
+
+    # ---------- 队列由忙转闲：事件驱动的那一次扫描 ----------
+    real_generating = jobs_mod.generating
+    runner._was_busy = False
+    runner._scan_due = False
+    jobs_mod.generating = lambda: True
+    runner._tick()
+    busy_no_scan = runner._scan_due
+    jobs_mod.generating = lambda: False
+    idle_result = runner._tick()
+    queued = runner._scan_due
+    jobs_mod.generating = real_generating
+    # 这一跳要么已经扫完（返回 True），要么把这次事件排进下一跳 —— 两者都算"立刻响应"
+    check("生成中不额外安排扫描", busy_no_scan is False, busy_no_scan)
+    check("队列转闲后立即安排扫描", bool(idle_result) or queued is True,
+          {"tick": idle_result, "queued": queued})
+
     started = time.perf_counter()
     rt.runner.note_request(120.0)
     rt.runner.sleep_for()

@@ -15,6 +15,9 @@ DUTY_IDLE_VIEWER = 0.010
 DUTY_GENERATING_VIEWER = 0.060
 DUTY_GENERATING_NO_VIEWER = 0.200
 VIEWER_TIMEOUT = 30.0
+SCAN_INTERVAL = 600.0
+SCAN_PROBE_INTERVAL = 5.0
+SCAN_HOT_INTERVAL = 20.0
 LATENCY_WINDOW = 40
 LATENCY_HIGH_MS = 30.0
 DEGRADE_STEP = 0.04
@@ -48,6 +51,9 @@ class JobRunner(threading.Thread):
         self._extra_sleep = 0.0
         self._last_degrade = 0.0
         self._last_cleanup = 0.0
+        self._last_probe = 0.0
+        self._was_busy = False
+        self._scan_due = False
         self.state = {"phase": "idle", "dir": "", "parsed": 0, "families": 0, "duty": 0.0, "sleep": 0.0}
         # 必须可重入：sleep_for 持锁期间会调用 p95_ms()，普通 Lock 会自死锁并冻结事件循环
         self._lock = threading.RLock()
@@ -118,6 +124,11 @@ class JobRunner(threading.Thread):
 
     def _tick(self) -> bool:
         now = time.time()
+        # 事件驱动：队列由忙转闲说明这一轮生成刚结束，新图应该已经落盘，立刻安排一次扫描
+        busy = generating()
+        if self._was_busy and not busy:
+            self._scan_due = True
+        self._was_busy = busy
         if now - self._last_cleanup > CLEANUP_INTERVAL:
             self._last_cleanup = now
             threading.Thread(
@@ -181,9 +192,41 @@ class JobRunner(threading.Thread):
                 if os.path.isdir(batch_dir):
                     shutil.rmtree(batch_dir, ignore_errors=True)
 
+    def _roots_signature(self) -> str:
+        """根目录自身 + 最新几个子目录的 (名字, mtime)。新图落地必然改动其中之一，
+        所以这个签名用两次 scandir 就能判断"要不要重新遍历全库"。"""
+        parts = []
+        for name, path in self.scanner.roots:
+            if not path or not os.path.isdir(path):
+                continue
+            try:
+                with os.scandir(path) as it:
+                    dirs = sorted((entry for entry in it if entry.is_dir()), key=lambda entry: entry.name)
+                newest = [(entry.name, int(entry.stat().st_mtime)) for entry in dirs[-4:]]
+                parts.append("%s@%d|%s" % (name, int(os.stat(path).st_mtime),
+                                           ";".join("%s@%d" % item for item in newest)))
+            except OSError:
+                continue
+        return "|".join(parts)
+
     def _needs_scan(self) -> bool:
-        last = float(self.store.get_setting("last_scan_at", "0") or 0)
-        if time.time() - last > 600:
-            self.store.set_setting("last_scan_at", str(time.time()))
+        now = time.time()
+        if self._scan_due:
+            self._scan_due = False
+            self.store.set_setting("last_scan_at", str(now))
             return True
-        return False
+        last = float(self.store.get_setting("last_scan_at", "0") or 0)
+        if now - last > SCAN_INTERVAL:
+            self.store.set_setting("last_scan_at", str(now))
+            return True
+        if now - self._last_probe < SCAN_PROBE_INTERVAL:
+            return False
+        self._last_probe = now
+        signature = self._roots_signature()
+        if not signature or signature == self.store.get_setting("roots_signature", ""):
+            return False
+        if now - last <= SCAN_HOT_INTERVAL:
+            return False  # 不写回签名：下一轮探测仍会命中，等冷下来再扫
+        self.store.set_setting("roots_signature", signature)
+        self.store.set_setting("last_scan_at", str(now))
+        return True
