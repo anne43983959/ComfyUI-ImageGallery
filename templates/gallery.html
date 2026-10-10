@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Image Gallery</title>
+<script>
+  (function () {
+    var saved = localStorage.getItem('ig.theme') || 'auto';
+    var dark = saved === 'dark' || (saved === 'auto' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+    document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light');
+  })();
+</script>
+<link rel="icon" type="image/svg+xml" href="{{ static_base }}/icon.svg?v={{ version }}">
+<link rel="stylesheet" href="{{ static_base }}/css/gallery.css?v={{ version }}">
+</head>
+<body data-api-base="{{ api_base }}">
+<header class="ig-header">
+  <button class="ig-btn ig-mini ig-rail-toggle" id="ig-sidebar-toggle-top"
+          title="显示 / 隐藏左侧目录栏（快捷键 [ ）">☰</button>
+  <div class="ig-brand">
+    <img class="ig-logo" src="{{ static_base }}/icon.svg?v={{ version }}" alt="">
+    <span class="ig-title">Image Gallery</span>
+    <span class="ig-badge" id="ig-badge">…</span>
+  </div>
+  <div class="ig-roots">
+    <button class="ig-root is-active" data-root="output">Output</button>
+    <button class="ig-root" data-root="temp">Temp</button>
+  </div>
+  <datalist id="ig-search-history"></datalist>
+  <div class="ig-status" id="ig-status">连接中…</div>
+  <div class="ig-header-actions">
+    <button class="ig-btn" id="ig-scan" data-i18n="scan" title="重新遍历目录并补解析">刷新索引</button>
+    <button class="ig-btn" id="ig-trash" data-i18n="trash" title="查看并还原删除的图片">回收站</button>
+    <button class="ig-btn" id="ig-settings" data-i18n="settings" title="会话窗口与存档目录">设置</button>
+    <button class="ig-btn" id="ig-lang" title="切换界面语言 / Switch language">EN</button>
+  </div>
+</header>
+
+<main class="ig-main">
+  <aside class="ig-sidebar" id="ig-sidebar">
+    <div class="ig-sidebar-head">
+      <span>目录</span>
+      <input id="ig-dir-filter" class="ig-mini-input" type="search" placeholder="筛选目录">
+      <button class="ig-btn ig-mini" id="ig-sidebar-toggle" title="隐藏 / 显示目录栏">⟨</button>
+    </div>
+    <div class="ig-dir-list" id="ig-dir-list"></div>
+    <div class="ig-sidebar-resize" id="ig-sidebar-resize" title="拖动调整宽度，双击复位"></div>
+  </aside>
+
+  <section class="ig-content">
+    <div class="ig-toolbar">
+      <input id="ig-search" class="ig-search" type="search" list="ig-search-history" placeholder="搜索提示词、文件名、模型（FTS5，≥3 字符为子串匹配）">
+      <button class="ig-btn" id="ig-model-btn" data-i18n="modelFilter">模型筛选</button>
+      <button class="ig-btn" id="ig-drafts" data-i18n="drafts" title="默认隐藏目录名含草稿关键词的图片">草稿</button>
+      <button class="ig-btn" id="ig-fav" data-i18n="favorites" title="只看已收藏">收藏</button>
+      <button class="ig-btn" id="ig-tag-btn" data-i18n="tags" title="按自定义标签筛选">标签</button>
+      <button class="ig-btn" id="ig-regex" title="正则搜索（对合并文本做 re.search）">.*</button>
+      <select id="ig-sort" class="ig-select">
+        <option value="mtime_desc" data-i18n="sortNew">时间倒序</option>
+        <option value="mtime_asc" data-i18n="sortOld">时间正序</option>
+        <option value="size_desc" data-i18n="sortSize">大小倒序</option>
+        <option value="name_asc" data-i18n="sortName">名称</option>
+        <option value="relevance" data-i18n="sortRelevance">相关度（需搜索词）</option>
+      </select>
+      <span class="ig-spacer"></span>
+      <span class="ig-count ig-muted" id="ig-count">—</span>
+      <label class="ig-size" title="调整缩略图大小（双击复位）">
+        <input type="range" id="ig-thumb-size" min="120" max="280" step="4">
+        <span class="ig-muted">缩略图</span>
+      </label>
+      <button class="ig-btn is-primary" id="ig-select-mode">多选</button>
+    </div>
+
+    <div class="ig-bulkbar" id="ig-bulkbar" hidden>
+      <span id="ig-bulk-text">已选 0 项</span>
+      <button class="ig-btn" id="ig-bulk-compare" data-i18n="compare">对比</button>
+      <button class="ig-btn" id="ig-bulk-save" data-i18n="saveAs">另存为</button>
+      <button class="ig-btn" id="ig-bulk-rename" data-i18n="rename">重命名</button>
+      <button class="ig-btn" id="ig-bulk-move" data-i18n="moveTo">移动到</button>
+      <button class="ig-btn is-danger" id="ig-bulk-delete" data-i18n="remove">删除</button>
+      <button class="ig-btn" id="ig-bulk-all" data-i18n="selectAll">全选已加载</button>
+      <button class="ig-btn" id="ig-bulk-clear" data-i18n="clearSel">清除选择</button>
+    </div>
+
+    <div class="ig-grid-wrap" id="ig-grid-wrap">
+      <div class="ig-grid" id="ig-grid"></div>
+      <div class="ig-empty" id="ig-empty" hidden></div>
+      <div class="ig-loading" id="ig-loading" hidden>加载中…</div>
+    </div>
+  </section>
+</main>
+
+<aside class="ig-drawer" id="ig-drawer" hidden>
+  <div class="ig-drawer-head">
+    <span id="ig-drawer-title">详情</span>
+    <div>
+      <button class="ig-btn ig-mini" id="ig-prev" title="更新的一张（网格左侧）">◀</button>
+      <button class="ig-btn ig-mini" id="ig-next" title="更早的一张（网格右侧）">▶</button>
+      <button class="ig-btn ig-mini" id="ig-drawer-close">✕</button>
+    </div>
+  </div>
+  <div class="ig-drawer-body" id="ig-drawer-body"></div>
+</aside>
+
+<div class="ig-update" id="ig-update" hidden>
+  <span>画廊已更新到新版本</span>
+  <button class="ig-btn ig-mini" id="ig-update-reload">刷新页面</button>
+</div>
+
+<div class="ig-lightbox" id="ig-lightbox" hidden>
+  <button class="ig-lightbox-nav is-prev" id="ig-lb-prev" title="更新的一张（网格左侧）">‹</button>
+  <img class="ig-lightbox-img" id="ig-lightbox-img" alt="" title="双击关闭 · 点左半边看更新的 · 点右半边看更早的">
+  <button class="ig-lightbox-nav is-next" id="ig-lb-next" title="更早的一张（网格右侧）">›</button>
+  <button class="ig-lightbox-close" id="ig-lb-close" title="关闭（Esc）">✕</button>
+  <div class="ig-lightbox-bar">
+    <span id="ig-lightbox-name"></span>
+    <span class="ig-spacer"></span>
+    <span class="ig-muted" id="ig-lightbox-hint">双击图片关闭 · 点图片左半/右半翻页 · Esc 关闭</span>
+    <button class="ig-btn ig-mini" id="ig-lb-detail" data-i18n="viewDetail">查看详情</button>
+  </div>
+</div>
+
+<div class="ig-menu" id="ig-menu" hidden></div>
+
+<div class="ig-overlay" id="ig-overlay" hidden>
+  <div class="ig-modal">
+    <div class="ig-modal-head">
+      <span id="ig-modal-title">标题</span>
+      <button class="ig-btn ig-mini" id="ig-modal-close">✕</button>
+    </div>
+    <div class="ig-modal-body" id="ig-modal-body"></div>
+    <div class="ig-modal-foot" id="ig-modal-foot"></div>
+  </div>
+</div>
+
+<div class="ig-toasts" id="ig-toasts"></div>
+
+<script type="module" src="{{ static_base }}/js/gallery.js?v={{ version }}"></script>
+</body>
+</html>

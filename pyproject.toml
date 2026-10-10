@@ -1,0 +1,16 @@
+[project]
+name = "comfyui-imagegallery"
+version = "0.5.0"
+description = "Same-origin image gallery for ComfyUI output: prompt search, model facets, workflow diff families, favorites, tags and trash."
+readme = "README.md"
+license = { file = "LICENSE" }
+requires-python = ">=3.10"
+dependencies = []
+
+[project.urls]
+Repository = "https://github.com/anne43983959/ComfyUI-ImageGallery"
+
+[tool.comfy]
+PublisherId = "anne43983959"
+DisplayName = "Image Gallery"
+Icon = "https://raw.githubusercontent.com/anne43983959/ComfyUI-ImageGallery/main/static/icon.svg"

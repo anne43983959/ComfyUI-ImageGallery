@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Image Gallery">
+  <defs>
+    <linearGradient id="igGrad" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#ff7a45"/>
+      <stop offset="1" stop-color="#f5b301"/>
+    </linearGradient>
+  </defs>
+  <rect x="3" y="13" width="44" height="44" rx="11" fill="#7a2f10" opacity="0.35"/>
+  <rect x="13" y="5" width="48" height="48" rx="13" fill="url(#igGrad)"/>
+  <circle cx="28" cy="21" r="5.2" fill="#ffffff" opacity="0.95"/>
+  <path d="M18 47 L32 30 L42 42 L47 36 L56 47 Z" fill="#ffffff" opacity="0.95"/>
+</svg>
