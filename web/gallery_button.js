@@ -121,8 +121,35 @@ function workflowTabName(imageName) {
 }
 
 async function openInNewTab(name, graph) {
-  // loadGraphData 的第 4 个参数是工作流名：当前前端会为它新开一个标签页并把图放进去，
-  // 不会顶掉正在编辑的画布（createTemporary + openWorkflow 只建标签页、不载图，实测无效）。
+  // 直接 loadGraphData(图, …, 名字) 有坑：它先把图配进画布，再走
+  // afterLoadNewGraph → activateLoadedWorkflow → createNewWorkflow，而 createNewWorkflow
+  // 会对刚载入的图状态做 structuredClone；带 DOM 控件的自定义节点（本机常见）会让这一步
+  // 抛 "Failed to execute 'structuredClone'"，结果画布被换掉、标签页却没建成。
+  //
+  // 可靠做法：把这份工作流按图片名写进工作流目录，再按路径打开 —— 走的是"从侧栏打开
+  // 已保存工作流"那条路，它不 clone 当前状态，因此既不报错也不碰你正在编辑的标签页，
+  // 顺带给你留下一份与图片同名的可复用工作流。
+  const service = app.extensionManager && app.extensionManager.workflow;
+  if (service && typeof service.syncWorkflows === "function" && typeof service.openWorkflow === "function") {
+    const path = "workflows/" + name + ".json";
+    try {
+      const response = await fetch("/api/userdata/" + encodeURIComponent(path), {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(graph),
+      });
+      if (response.ok) {
+        await service.syncWorkflows();
+        const workflow = service.getWorkflowByPath(path);
+        if (workflow) {
+          await service.openWorkflow(workflow);
+          return true;
+        }
+      }
+    } catch (error) {
+      console.warn("[ImageGallery] save-and-open failed, falling back:", error);
+    }
+  }
   await app.loadGraphData(graph, true, true, name);
   return true;
 }
