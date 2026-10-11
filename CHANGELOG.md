@@ -2,6 +2,18 @@
 
 All notable changes to this plugin, in build order.
 
+## 0.6.3 — the workflow handed to ComfyUI leaves nothing behind
+
+- The workflow is written to `workflows/<image name>.json` only as a **transient** carrier: it is opened as
+  a tab and then deleted again, so nothing accumulates in the workflow list. Sending the same image twice
+  re-focuses the open tab without writing a file.
+- After opening, the graph is pushed to the canvas with `loadGraphData(graph, true, true)` (no name, so no
+  `createNewWorkflow`). The active workflow is already the tab we just opened, so the current graph the user
+  was editing is never replaced.
+- That last call still throws the frontend's `DataCloneError` while it bookkeeps the loaded state (same
+  `structuredClone` limitation as 0.6.2); the canvas and the tab are correct by then, so the error is caught
+  and logged instead of surfacing. Saving the tab yourself writes it back as a normal workflow.
+
 ## 0.6.2 — send to ComfyUI goes through saved workflows
 
 - "Send to ComfyUI" writes the extracted workflow to `workflows/<image name>.json` and opens that file by
