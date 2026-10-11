@@ -2,6 +2,18 @@
 
 All notable changes to this plugin, in build order.
 
+## 0.6.2 — send to ComfyUI goes through saved workflows
+
+- "Send to ComfyUI" writes the extracted workflow to `workflows/<image name>.json` and opens that file by
+  path, i.e. the same path as opening a saved workflow from the sidebar. The workflow being edited is not
+  touched, and the sent workflow arrives in its own tab named after the image.
+- Why not `loadGraphData(graph, true, true, name)` (which is what the drop handler ends up calling):
+  the frontend then runs `afterLoadNewGraph → activateLoadedWorkflow → createNewWorkflow`, and
+  `createNewWorkflow` does `structuredClone` on the freshly configured graph state. Node state that
+  comes back as a Vue reactive object (custom nodes with DOM widgets) cannot be cloned, so the call throws
+  `DataCloneError` *after* the canvas has already been replaced — the old behaviour users saw. Writing and
+  opening a file never runs that code path.
+
 ## 0.6.1 — send to ComfyUI opens a new tab
 
 - "Send to ComfyUI" now opens the extracted workflow in a **new tab named after the image** and leaves
