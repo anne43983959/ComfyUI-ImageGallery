@@ -133,21 +133,39 @@ async function openInNewTab(name, graph) {
   if (service && typeof service.syncWorkflows === "function" && typeof service.openWorkflow === "function") {
     const path = "workflows/" + name + ".json";
     try {
-      const response = await fetch("/api/userdata/" + encodeURIComponent(path), {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify(graph),
-      });
-      if (response.ok) {
+      let workflow = service.getWorkflowByPath(path);
+      const created = !workflow;
+      if (created) {
+        const response = await fetch("/api/userdata/" + encodeURIComponent(path), {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(graph),
+        });
+        if (!response.ok) throw new Error("HTTP " + response.status);
         await service.syncWorkflows();
-        const workflow = service.getWorkflowByPath(path);
-        if (workflow) {
-          await service.openWorkflow(workflow);
-          return true;
+        workflow = service.getWorkflowByPath(path);
+      }
+      if (workflow) {
+        await service.openWorkflow(workflow);
+        // openWorkflow 已经把内容读进内存，文件只是中转：立刻删掉，工作流目录里不留东西。
+        // 不要紧接着 syncWorkflows —— 那会把还开着的这个标签页从标签栏里摘掉。
+        // 用户若自己按了保存（Ctrl+S），前端会把文件按同名重新写回，那时它就是正式工作流了。
+        if (created && workflow.content) {
+          await fetch("/api/userdata/" + encodeURIComponent(path), { method: "DELETE" });
         }
+        // openWorkflow 只负责把标签页建出来（画布不跟着走），画布得靠 loadGraphData 推。
+        // 这时活动标签页已经是我们新建的那个，所以这一推只影响它，不会动你原来的工作流；
+        // 前端还会在收尾时对图状态做一次 structuredClone，遇到带 DOM 控件的节点会抛
+        // DataCloneError —— 画布此时已经换好了，这里咽掉，不让它冒到界面上。
+        try {
+          await app.loadGraphData(graph, true, true);
+        } catch (error) {
+          console.warn("[ImageGallery] canvas refresh after open:", error);
+        }
+        return true;
       }
     } catch (error) {
-      console.warn("[ImageGallery] save-and-open failed, falling back:", error);
+      console.warn("[ImageGallery] transient workflow failed, falling back:", error);
     }
   }
   await app.loadGraphData(graph, true, true, name);
