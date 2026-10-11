@@ -112,66 +112,6 @@ function notice(message, ok) {
   console.log("[ImageGallery]", message);
 }
 
-/* 与图片同名，且开成新标签页 —— 不顶掉当前画布。
-   前端 1.53+ 的 workflow 服务提供 createTemporary + openWorkflow；老前端只有 loadGraphData，
-   那种情况才回退到"替换当前画布"，并在提示里说清楚。 */
-function workflowTabName(imageName) {
-  const base = String(imageName || "").replace(/\.[^.]+$/, "").trim();
-  return base || "图片工作流";
-}
-
-async function openInNewTab(name, graph) {
-  // 直接 loadGraphData(图, …, 名字) 有坑：它先把图配进画布，再走
-  // afterLoadNewGraph → activateLoadedWorkflow → createNewWorkflow，而 createNewWorkflow
-  // 会对刚载入的图状态做 structuredClone；带 DOM 控件的自定义节点（本机常见）会让这一步
-  // 抛 "Failed to execute 'structuredClone'"，结果画布被换掉、标签页却没建成。
-  //
-  // 可靠做法：把这份工作流按图片名写进工作流目录，再按路径打开 —— 走的是"从侧栏打开
-  // 已保存工作流"那条路，它不 clone 当前状态，因此既不报错也不碰你正在编辑的标签页，
-  // 顺带给你留下一份与图片同名的可复用工作流。
-  const service = app.extensionManager && app.extensionManager.workflow;
-  if (service && typeof service.syncWorkflows === "function" && typeof service.openWorkflow === "function") {
-    const path = "workflows/" + name + ".json";
-    try {
-      let workflow = service.getWorkflowByPath(path);
-      const created = !workflow;
-      if (created) {
-        const response = await fetch("/api/userdata/" + encodeURIComponent(path), {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify(graph),
-        });
-        if (!response.ok) throw new Error("HTTP " + response.status);
-        await service.syncWorkflows();
-        workflow = service.getWorkflowByPath(path);
-      }
-      if (workflow) {
-        await service.openWorkflow(workflow);
-        // openWorkflow 已经把内容读进内存，文件只是中转：立刻删掉，工作流目录里不留东西。
-        // 不要紧接着 syncWorkflows —— 那会把还开着的这个标签页从标签栏里摘掉。
-        // 用户若自己按了保存（Ctrl+S），前端会把文件按同名重新写回，那时它就是正式工作流了。
-        if (created && workflow.content) {
-          await fetch("/api/userdata/" + encodeURIComponent(path), { method: "DELETE" });
-        }
-        // openWorkflow 只负责把标签页建出来（画布不跟着走），画布得靠 loadGraphData 推。
-        // 这时活动标签页已经是我们新建的那个，所以这一推只影响它，不会动你原来的工作流；
-        // 前端还会在收尾时对图状态做一次 structuredClone，遇到带 DOM 控件的节点会抛
-        // DataCloneError —— 画布此时已经换好了，这里咽掉，不让它冒到界面上。
-        try {
-          await app.loadGraphData(graph, true, true);
-        } catch (error) {
-          console.warn("[ImageGallery] canvas refresh after open:", error);
-        }
-        return true;
-      }
-    } catch (error) {
-      console.warn("[ImageGallery] transient workflow failed, falling back:", error);
-    }
-  }
-  await app.loadGraphData(graph, true, true, name);
-  return true;
-}
-
 async function loadWorkflowPayload(payload) {
   if (!payload || !payload.workflow) return;
   let graph = null;
@@ -181,16 +121,24 @@ async function loadWorkflowPayload(payload) {
     notice("工作流 JSON 解析失败：" + error.message, false);
     return;
   }
-  const name = workflowTabName(payload.name);
+  const hasGraph = app.graph && app.graph._nodes && app.graph._nodes.length > 0;
+  const apply = function () {
+    try {
+      app.loadGraphData(graph);
+      const missing = (app.graph && app.graph._nodes ? app.graph._nodes : []).filter(function (item) {
+        return item.has_errors || item.type === "MissingNode";
+      }).length;
+      notice("已载入 " + (payload.name || "图片工作流") + (missing ? "，有 " + missing + " 个节点缺失（需安装对应插件）" : ""), true);
+    } catch (error) {
+      notice("载入失败：" + error.message, false);
+    }
+  };
+  if (!hasGraph) { apply(); return; }
   try {
-    const asTab = await openInNewTab(name, graph);
-    const missing = (app.graph && app.graph._nodes ? app.graph._nodes : []).filter(function (item) {
-      return item.has_errors || item.type === "MissingNode";
-    }).length;
-    const suffix = missing ? "，有 " + missing + " 个节点缺失（需安装对应插件）" : "";
-    notice((asTab ? "已在新标签页打开《" + name + "》" : "已载入《" + name + "》（当前画布已被替换）") + suffix, true);
+    const confirmed = await app.ui.dialog.confirm("用《" + (payload.name || "该图片") + "》的工作流覆盖当前画布？");
+    if (confirmed) apply();
   } catch (error) {
-    notice("载入失败：" + error.message, false);
+    apply();
   }
 }
 
