@@ -2,6 +2,17 @@
 
 All notable changes to this plugin, in build order.
 
+## 0.6.6 — the info panel is a docked, resizable sidebar
+
+- The detail panel moved out of `position: fixed` and into `.ig-main`, as a flex sibling of the grid.
+  Opening it narrows the grid area so the cards reflow (measured: content 1017 -> 657 px and 5 -> 3 columns
+  with the panel at 360 px), instead of covering the right-hand column.
+- New `#ig-drawer-resize` handle on the panel's left edge: drag to resize between 260 and 720 px
+  (persisted as `ig.drawerWidth`), double-click to reset to 360. Dragging updates the width live and
+  re-runs `layout()` on release; opening and closing reflow immediately via `applyDrawer()` / `hideDrawer()`.
+- Toolbar polish for the narrower content column: `.ig-btn` no longer wraps its label
+  ("模型筛选" used to stack vertically) and `.ig-toolbar` wraps onto a second row instead of squeezing.
+
 ## 0.6.5 — the sent workflow gets the image name
 
 - `app.loadGraphData(graph, true, true, tabName)` now passes the image name (extension stripped) as the

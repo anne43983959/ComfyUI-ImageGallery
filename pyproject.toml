@@ -1,6 +1,6 @@
 [project]
 name = "comfyui-imagegallery"
-version = "0.6.5"
+version = "0.6.6"
 description = "Same-origin image gallery for ComfyUI output: prompt search, model facets, workflow diff families, favorites, tags and trash."
 readme = "README.md"
 license = { file = "LICENSE" }

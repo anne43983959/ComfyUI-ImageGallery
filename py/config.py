@@ -8,7 +8,7 @@ CACHE_DIR = os.environ.get("IG_CACHE_DIR") or os.path.join(ROOT, "cache")
 
 PLUGIN_NAME = "ComfyUI-ImageGallery"
 MILESTONE = "M8"
-VERSION = "0.6.5"
+VERSION = "0.6.6"
 
 SESSION_GAP_HOURS = 6.0
 
