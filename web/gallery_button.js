@@ -122,9 +122,13 @@ async function loadWorkflowPayload(payload) {
     return;
   }
   const hasGraph = app.graph && app.graph._nodes && app.graph._nodes.length > 0;
+  // 第 4 个参数（工作流名）必须给：老前端（1.45.x）的 afterLoadNewGraph 在"没名字"时
+  // 会额外建一个名为 Unsaved Workflow 的空工作流标签页（实测每次 +1），给了名字则只开
+  // 一个以图片名命名的标签页。
+  const tabName = String(payload.name || "图片工作流").replace(/\.[^.]+$/, "");
   const apply = function () {
     try {
-      app.loadGraphData(graph);
+      app.loadGraphData(graph, true, true, tabName);
       const missing = (app.graph && app.graph._nodes ? app.graph._nodes : []).filter(function (item) {
         return item.has_errors || item.type === "MissingNode";
       }).length;
