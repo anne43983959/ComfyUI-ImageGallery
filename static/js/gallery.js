@@ -49,7 +49,7 @@ const el = {};
 ['ig-badge', 'ig-status', 'ig-dir-list', 'ig-dir-filter', 'ig-search', 'ig-model-btn', 'ig-sort',
  'ig-count', 'ig-select-mode', 'ig-bulkbar', 'ig-bulk-text', 'ig-bulk-save', 'ig-bulk-delete',
  'ig-bulk-all', 'ig-bulk-clear', 'ig-grid', 'ig-grid-wrap', 'ig-empty', 'ig-loading',
- 'ig-drawer', 'ig-drawer-title', 'ig-drawer-body', 'ig-drawer-close', 'ig-prev', 'ig-next',
+ 'ig-drawer', 'ig-drawer-title', 'ig-drawer-body', 'ig-drawer-close', 'ig-drawer-resize', 'ig-prev', 'ig-next',
  'ig-menu', 'ig-overlay', 'ig-modal-title', 'ig-modal-body', 'ig-modal-foot', 'ig-modal-close',
  'ig-toasts', 'ig-scan', 'ig-trash', 'ig-settings', 'ig-drafts', 'ig-fav', 'ig-tag-btn',
  'ig-lightbox', 'ig-lightbox-img', 'ig-lightbox-name', 'ig-lightbox-zoom', 'ig-lb-prev', 'ig-lb-next', 'ig-lb-close', 'ig-lb-detail',
@@ -464,6 +464,7 @@ async function openDetail(fileId) {
     state.detail = data;
     renderDetail(data);
     el['ig-drawer'].hidden = false;
+    applyDrawer();
     setActive(fileId, true);
   } catch (error) {
     toast('详情加载失败：' + error.message, 'error');
@@ -677,7 +678,7 @@ function removeItems(ids) {
           toggleSelect(0, false);
           await loadDirs();
           await reload();
-          el['ig-drawer'].hidden = true;
+          hideDrawer();
         } catch (error) {
           toast('删除失败：' + error.message, 'error');
         }
@@ -1182,6 +1183,9 @@ function bindLightbox() {
 const SIDEBAR_MIN = 160;
 const SIDEBAR_MAX = 560;
 const SIDEBAR_DEFAULT = 232;
+const DRAWER_MIN = 260;
+const DRAWER_MAX = 720;
+const DRAWER_DEFAULT = 360;
 
 function applySidebar() {
   let width = SIDEBAR_DEFAULT;
@@ -1245,6 +1249,54 @@ function bindSidebar() {
   });
   el['ig-sidebar-toggle'].addEventListener('click', toggleSidebar);
   el['ig-sidebar-toggle-top'].addEventListener('click', toggleSidebar);
+}
+
+/* ---------------- 信息栏：停靠式侧栏（可调宽，撑动网格重排） ---------------- */
+
+function applyDrawer() {
+  let width = DRAWER_DEFAULT;
+  try { width = Number(localStorage.getItem('ig.drawerWidth') || DRAWER_DEFAULT) || DRAWER_DEFAULT; } catch (error) { /* ignore */ }
+  width = Math.min(DRAWER_MAX, Math.max(DRAWER_MIN, width));
+  el['ig-drawer'].style.width = width + 'px';
+  el['ig-drawer'].style.flexBasis = width + 'px';
+  layout();
+}
+
+function hideDrawer() {
+  el['ig-drawer'].hidden = true;
+  layout();
+}
+
+function bindDrawer() {
+  const handle = el['ig-drawer-resize'];
+  let dragging = false;
+  handle.addEventListener('pointerdown', function (event) {
+    dragging = true;
+    handle.classList.add('is-active');
+    try { handle.setPointerCapture(event.pointerId); } catch (error) { /* ignore */ }
+    event.preventDefault();
+  });
+  handle.addEventListener('pointermove', function (event) {
+    if (!dragging) return;
+    const right = el['ig-drawer'].getBoundingClientRect().right;
+    const width = Math.min(DRAWER_MAX, Math.max(DRAWER_MIN, right - event.clientX));
+    el['ig-drawer'].style.width = width + 'px';
+    el['ig-drawer'].style.flexBasis = width + 'px';
+    try { localStorage.setItem('ig.drawerWidth', String(Math.round(width))); } catch (error) { /* ignore */ }
+  });
+  const stop = function (event) {
+    if (!dragging) return;
+    dragging = false;
+    handle.classList.remove('is-active');
+    try { handle.releasePointerCapture(event.pointerId); } catch (error) { /* ignore */ }
+    layout();
+  };
+  handle.addEventListener('pointerup', stop);
+  handle.addEventListener('pointercancel', stop);
+  handle.addEventListener('dblclick', function () {
+    try { localStorage.setItem('ig.drawerWidth', String(DRAWER_DEFAULT)); } catch (error) { /* ignore */ }
+    applyDrawer();
+  });
 }
 
 /* ---------------- 批量重命名 / 移动到 / 对比视图 ---------------- */
@@ -1461,7 +1513,7 @@ function bind() {
     });
   });
 
-  el['ig-drawer-close'].addEventListener('click', function () { el['ig-drawer'].hidden = true; });
+  el['ig-drawer-close'].addEventListener('click', hideDrawer);
   el['ig-prev'].addEventListener('click', function () { if (state.detail && state.detail.newer_id) openDetail(state.detail.newer_id); });
   el['ig-next'].addEventListener('click', function () { if (state.detail && state.detail.older_id) openDetail(state.detail.older_id); });
   el['ig-modal-close'].addEventListener('click', closeModal);
@@ -1559,7 +1611,7 @@ function bind() {
       if (!el['ig-lightbox'].hidden) { closeLightbox(); return; }
       if (!el['ig-menu'].hidden) { closeMenu(); return; }
       if (!el['ig-overlay'].hidden) { closeModal(); return; }
-      if (!el['ig-drawer'].hidden) { el['ig-drawer'].hidden = true; }
+      if (!el['ig-drawer'].hidden) hideDrawer();
       return;
     }
     if (!el['ig-lightbox'].hidden) {
@@ -1588,6 +1640,7 @@ async function boot() {
   bindLightbox();
   bindSidebar();
   applySidebar();
+  bindDrawer();
   applyLanguage();
   fillSearchHistory();
   watchVersion();

@@ -46,6 +46,7 @@ button { font: inherit; }
   padding: 5px 10px; border-radius: 8px; cursor: pointer;
   background: var(--ig-panel); color: var(--ig-text);
   border: 1px solid var(--ig-border);
+  white-space: nowrap;
 }
 .ig-btn:hover { border-color: var(--ig-accent); color: var(--ig-accent); }
 .ig-btn.is-primary { background: var(--ig-accent); border-color: var(--ig-accent); color: #fff; }
@@ -145,7 +146,7 @@ button { font: inherit; }
 .ig-dir small { color: var(--ig-muted); font-weight: 400; }
 
 .ig-content { flex: 1; min-width: 0; display: flex; flex-direction: column; }
-.ig-toolbar { display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-bottom: 1px solid var(--ig-border); }
+.ig-toolbar { display: flex; align-items: center; flex-wrap: wrap; row-gap: 6px; gap: 8px; padding: 8px 12px; border-bottom: 1px solid var(--ig-border); }
 .ig-search { flex: 1; max-width: 520px; padding: 6px 10px; border-radius: 8px; border: 1px solid var(--ig-border); background: var(--ig-bg); color: var(--ig-text); }
 .ig-select { padding: 5px 8px; border-radius: 8px; border: 1px solid var(--ig-border); background: var(--ig-bg); color: var(--ig-text); }
 .ig-spacer { flex: 1; }
@@ -193,9 +194,20 @@ button { font: inherit; }
 }
 
 .ig-drawer {
-  position: fixed; top: 48px; right: 0; bottom: 0; width: 460px; max-width: 60vw;
+  position: relative; flex: 0 0 auto; width: 360px; max-width: 70vw;
   background: var(--ig-panel); border-left: 1px solid var(--ig-border);
-  display: flex; flex-direction: column; z-index: 30; box-shadow: var(--ig-shadow);
+  display: flex; flex-direction: column; overflow: hidden;
+  animation: ig-drawer-in .18s ease-out;
+}
+.ig-drawer[hidden] { display: none; }
+.ig-drawer-resize {
+  position: absolute; top: 0; left: -3px; width: 7px; height: 100%;
+  cursor: col-resize; z-index: 6;
+}
+.ig-drawer-resize:hover, .ig-drawer-resize.is-active { background: var(--ig-accent-soft); }
+@keyframes ig-drawer-in {
+  from { transform: translateX(14px); opacity: .35; }
+  to { transform: translateX(0); opacity: 1; }
 }
 .ig-drawer-head { display: flex; align-items: center; justify-content: space-between; padding: 8px 10px; border-bottom: 1px solid var(--ig-border); }
 .ig-drawer-body { flex: 1; overflow: auto; padding: 10px; }
