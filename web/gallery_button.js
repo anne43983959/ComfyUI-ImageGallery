@@ -112,6 +112,21 @@ function notice(message, ok) {
   console.log("[ImageGallery]", message);
 }
 
+/* 与图片同名，且开成新标签页 —— 不顶掉当前画布。
+   前端 1.53+ 的 workflow 服务提供 createTemporary + openWorkflow；老前端只有 loadGraphData，
+   那种情况才回退到"替换当前画布"，并在提示里说清楚。 */
+function workflowTabName(imageName) {
+  const base = String(imageName || "").replace(/\.[^.]+$/, "").trim();
+  return base || "图片工作流";
+}
+
+async function openInNewTab(name, graph) {
+  // loadGraphData 的第 4 个参数是工作流名：当前前端会为它新开一个标签页并把图放进去，
+  // 不会顶掉正在编辑的画布（createTemporary + openWorkflow 只建标签页、不载图，实测无效）。
+  await app.loadGraphData(graph, true, true, name);
+  return true;
+}
+
 async function loadWorkflowPayload(payload) {
   if (!payload || !payload.workflow) return;
   let graph = null;
@@ -121,24 +136,16 @@ async function loadWorkflowPayload(payload) {
     notice("工作流 JSON 解析失败：" + error.message, false);
     return;
   }
-  const hasGraph = app.graph && app.graph._nodes && app.graph._nodes.length > 0;
-  const apply = function () {
-    try {
-      app.loadGraphData(graph);
-      const missing = (app.graph && app.graph._nodes ? app.graph._nodes : []).filter(function (item) {
-        return item.has_errors || item.type === "MissingNode";
-      }).length;
-      notice("已载入 " + (payload.name || "图片工作流") + (missing ? "，有 " + missing + " 个节点缺失（需安装对应插件）" : ""), true);
-    } catch (error) {
-      notice("载入失败：" + error.message, false);
-    }
-  };
-  if (!hasGraph) { apply(); return; }
+  const name = workflowTabName(payload.name);
   try {
-    const confirmed = await app.ui.dialog.confirm("用《" + (payload.name || "该图片") + "》的工作流覆盖当前画布？");
-    if (confirmed) apply();
+    const asTab = await openInNewTab(name, graph);
+    const missing = (app.graph && app.graph._nodes ? app.graph._nodes : []).filter(function (item) {
+      return item.has_errors || item.type === "MissingNode";
+    }).length;
+    const suffix = missing ? "，有 " + missing + " 个节点缺失（需安装对应插件）" : "";
+    notice((asTab ? "已在新标签页打开《" + name + "》" : "已载入《" + name + "》（当前画布已被替换）") + suffix, true);
   } catch (error) {
-    apply();
+    notice("载入失败：" + error.message, false);
   }
 }
 
