@@ -2,6 +2,17 @@
 
 All notable changes to this plugin, in build order.
 
+## 0.6.5 — the sent workflow gets the image name
+
+- `app.loadGraphData(graph, true, true, tabName)` now passes the image name (extension stripped) as the
+  fourth argument. Without it the 1.45.x frontend takes the `null` branch of `afterLoadNewGraph` and calls
+  `createNewTemporary(undefined, graph)`, which leaves an extra `Unsaved Workflow` tab behind on every send
+  (measured: the tab counter increments by one each time). With the name it opens a single tab named after
+  the image.
+- Unrelated to 0.6.1's failure on the 1.5x frontend: there the same call ran through
+  `activateLoadedWorkflow → createNewWorkflow → structuredClone` and threw. The 1.45.x `createTemporary`
+  has no `structuredClone`, so this is the correct call for the downgraded stack.
+
 ## 0.6.4 — send to ComfyUI is back to the plain load
 
 - `web/gallery_button.js` is reverted byte-for-byte to the pre-0.6.1 send path: parse the workflow out of
