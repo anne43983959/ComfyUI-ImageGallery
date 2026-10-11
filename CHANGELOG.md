@@ -2,6 +2,16 @@
 
 All notable changes to this plugin, in build order.
 
+## 0.6.4 — send to ComfyUI is back to the plain load
+
+- `web/gallery_button.js` is reverted byte-for-byte to the pre-0.6.1 send path: parse the workflow out of
+  the payload and hand it to `app.loadGraphData(graph)`, asking for confirmation first when a graph is
+  already on the canvas.
+- Why: the 0.6.1–0.6.3 variants are built on `app.extensionManager.workflow` (`createTemporary`,
+  `syncWorkflows`, `openWorkflow`) and the `/api/userdata` write-then-open dance. Those exist in the
+  1.5x frontend this plugin was developed against; on the 1.45.x frontend (ComfyUI v0.28.0) the plain
+  `loadGraphData` call is the one that works.
+
 ## 0.6.3 — the workflow handed to ComfyUI leaves nothing behind
 
 - The workflow is written to `workflows/<image name>.json` only as a **transient** carrier: it is opened as
