@@ -2,6 +2,15 @@
 
 All notable changes to this plugin, in build order.
 
+## 0.6.1 — send to ComfyUI opens a new tab
+
+- "Send to ComfyUI" now opens the extracted workflow in a **new tab named after the image** and leaves
+  the workflow being edited alone. The previous behaviour loaded the graph into the current canvas
+  after a confirmation prompt, which silently replaced whatever was open.
+- The 4-argument `app.loadGraphData(graph, true, true, name)` call is what creates the tab and loads the
+  graph; `createTemporary` + `openWorkflow` only creates the tab without loading anything (verified against
+  the bundled frontend), so it is not used.
+
 ## 0.6.0 — event-driven refresh and a zoomable viewer
 
 - The index refresh is no longer a flat ten-minute timer. The worker samples the prompt queue it
